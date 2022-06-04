@@ -13,6 +13,7 @@ sync github
   idle rotation
   moskau analysis
   kjhgfjhgf
+  kytf
 */
 
 // Define Variables we'll be connecting to
