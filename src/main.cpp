@@ -6,6 +6,10 @@
 #define LEFT_INPUT 0
 #define RIGHT_INPUT 0
 #define PIN_OUTPUT 3
+#define LED 15
+
+void initPID();
+void initMotor();
 
 /*
 TODO
@@ -26,18 +30,32 @@ LOLIN_I2C_MOTOR motor; // I2C address 0x30
 
 void setup()
 {
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, HIGH);
+
   Serial.begin(115200);
-  initPID();
+  //while(!Serial);
+  //initPID();
 
   Serial.println("Motor Shield Testing...");
   initMotor();
+
 }
 
 void loop()
 {
 
-  Input = analogRead(LEFT_INPUT) - analogRead(RIGHT_INPUT);
-  myPID.Compute();
+  //Input = analogRead(LEFT_INPUT) - analogRead(RIGHT_INPUT);
+  //myPID.Compute();
+  motor.changeDuty(MOTOR_CH_A,20);
+  digitalWrite(LED, HIGH);
+  delay(2000);
+  motor.changeDuty(MOTOR_CH_A,50);
+  digitalWrite(LED, LOW);
+  delay(2000);
+
+
+  Serial.println("loop");
 }
 
 bool idle()
@@ -56,8 +74,12 @@ void initPID()
 
 void initMotor()
 {
-  while (motor.PRODUCT_ID != PRODUCT_ID_I2C_MOTOR) // wait motor shield ready.
+  while (motor.PRODUCT_ID != PRODUCT_ID_I2C_MOTOR){ // wait motor shield ready.
     motor.getInfo();
+    Serial.println("Waiting for motor");
+    Serial.println(motor.PRODUCT_ID);
+    
+  }
 
   motor.changeFreq(MOTOR_CH_BOTH, 1000); // Change A & B 's Frequency to 1000Hz.
   /*
