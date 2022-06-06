@@ -8,7 +8,7 @@
 void setup()
 {
 
-    Wire.begin();
+    Wire.begin(33,35);
 
     Serial.begin(115200);
     // delay(1000);
