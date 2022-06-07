@@ -116,6 +116,7 @@ void loop()
   Serial.println(millis() - start);
 }
 
+
 void initPID()
 {
   setpoint = 0;
@@ -124,6 +125,7 @@ void initPID()
   myPID.SetMode(AUTOMATIC);
 }
 
+//initialize motors
 void initMotor()
 {
   while (motor.PRODUCT_ID != PRODUCT_ID_I2C_MOTOR)
@@ -142,6 +144,7 @@ void initMotor()
   motor.changeStatus(MOTOR_CH_B, MOTOR_STATUS_CW);
 }
 
+// take lots of readings of the photodiodes to establish a baseline
 void calibratePhotodiodes()
 {
   cal_l = analogRead(LEFT_INPUT);
@@ -156,6 +159,7 @@ void calibratePhotodiodes()
   }
 }
 
+//take a reading from the photodiodes and average to reduce noise. 
 void readPhotodiodes() // takes 2 ms to run
 {
   uint16_t l = analogRead(LEFT_INPUT);
@@ -171,6 +175,7 @@ void readPhotodiodes() // takes 2 ms to run
   pidIn = sens_l - sens_r;
 }
 
+// takes a distance measurement and if an object is too close, pause for a second
 void handleDistance()
 {
   distance = dist.measureDistanceCm();
@@ -180,6 +185,7 @@ void handleDistance()
   }
 }
 
+// blinks the led every 200 ms, call every loop
 void blinkLed()
 {
   uint16_t now = millis();
@@ -199,6 +205,7 @@ bool checkForSearch()
   return !(sens_l < cal_l + IDLE_OFFSET || sens_r < cal_r + IDLE_OFFSET);
 }
 
+// turns the robot until photodiodes read above a certain value
 void search()
 {
   while (checkForSearch)
