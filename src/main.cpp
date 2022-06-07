@@ -4,13 +4,14 @@
 #include <PID_v1.h>
 #include <HCSR04.h>
 #include <driver/dac.h>
-#include <Filter.h>
 
 #define LED 15
 #define LEFT_INPUT 16
 #define RIGHT_INPUT 12
 #define IDLE_OFFSET -20
+
 #define NR_SAMPLES 32
+#define FILTER_VALUE 40
 
 #define TRIG 1
 #define ECHO 2
@@ -59,8 +60,7 @@ uint8_t c=0;
 PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);
 LOLIN_I2C_MOTOR motor;                     // I2C address 0x30
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
-ExponentialFilter<int16_t> filter_l(40, 0);
-ExponentialFilter<int16_t> filter_r(40, 0);
+
 
 
 void setup()
@@ -81,8 +81,6 @@ void setup()
   Serial.println("Begin!");
 
   calibratePhotodiodes();
-  filter_l.SetCurrent(cal_l);
-  filter_r.SetCurrent(cal_l);
 
   Serial.println("cal_l");
   Serial.println(cal_l);
@@ -96,8 +94,6 @@ void setup()
 
 void loop()
 {
-  c++;
- 
   u32_t start = millis();
   blinkLed();
   readPhotodiodes();
@@ -180,11 +176,9 @@ void readPhotodiodes() // takes 2 ms to run
   // sens_l = l / NR_SAMPLES;
   // sens_r = r / NR_SAMPLES;
 
-  filter_l.Filter(l);
-  filter_r.Filter(r);
+  sens_l = (100 * FILTER_VALUE * l + (100 - FILTER_VALUE) * sens_l + 50)/100;
+  sens_r = (100 * FILTER_VALUE * r + (100 - FILTER_VALUE) * sens_r + 50)/100;
 
-  sens_l=filter_l.Current();
-  sens_r=filter_r.Current();
 
 
   pidIn = sens_l - sens_r;
