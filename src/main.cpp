@@ -3,11 +3,13 @@
 #include <Wire.h>
 #include <PID_v1.h>
 #include <HCSR04.h>
+#include <driver/dac.h>
 
 #define LED 15
 #define LEFT_INPUT 16
 #define RIGHT_INPUT 12
-#define IDLE_OFFSET 50
+#define IDLE_OFFSET -20
+#define NR_SAMPLES 32
 
 #define TRIG 1
 #define ECHO 2
@@ -32,7 +34,7 @@ TODO
 // Define Variables we'll be connecting to
 double setpoint, pidOutput;
 // Specify the links and initial tuning parameters
-double Kp = 2, Ki = 5, Kd = 1;
+double Kp = 0.0002, Ki = 0.2, Kd = 0.2;
 
 float cal_r = 0; // holds the average value of the photodiodes
 float cal_l = 0;
@@ -49,6 +51,10 @@ bool reverse_r = false;
 
 double distance = 0;
 
+uint16_t lastBlink = 0;
+
+uint8_t c=0;
+
 PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);
 LOLIN_I2C_MOTOR motor;                     // I2C address 0x30
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
@@ -58,12 +64,15 @@ void setup()
   pinMode(LED, OUTPUT);
   pinMode(LEFT_INPUT, INPUT_PULLDOWN);
   pinMode(RIGHT_INPUT, INPUT_PULLDOWN);
+  pinMode(39, OUTPUT);
+  dac_output_enable(DAC_CHANNEL_1);
+  dac_output_enable(DAC_CHANNEL_2);
 
   digitalWrite(LED, HIGH); // turn onboard led on to indicate functionaity
 
   Serial.begin(115200);
-  while (!Serial)
-    ;
+  // while (!Serial)
+  //   ;
   delay(2000);
   Serial.println("Begin!");
 
@@ -80,14 +89,20 @@ void setup()
 
 void loop()
 {
+  c++;
+ 
+  u32_t start = millis();
   blinkLed();
   readPhotodiodes();
-  if (checkForSearch())
-    search();
-  handleDistance();
+  // if (checkForSearch())
+  //   search();
+  // handleDistance();
 
   myPID.Compute();
-  Serial.println(pidOutput);
+  //Serial.println(pidOutput);
+  dac_output_voltage(DAC_CHANNEL_1, pidOutput / 2 + 128);
+  dac_output_voltage(DAC_CHANNEL_2, c);
+
   speed_l = base_speed + pidOutput;
   speed_r = base_speed + pidOutput * -1;
   reverse_l = speed_l < 0;
@@ -97,12 +112,15 @@ void loop()
   // motorB.setDirection(reverse_r);
   // motorA.setSpeed(speed_l);
   // motorB.setSpeed(speed_r);
+
+  Serial.println(millis() - start);
 }
 
 void initPID()
 {
   setpoint = 0;
-  myPID.SetOutputLimits(-1023, 1023);
+  myPID.SetOutputLimits(-UINT8_MAX, UINT8_MAX);
+  myPID.SetSampleTime(5);
   myPID.SetMode(AUTOMATIC);
 }
 
@@ -143,13 +161,13 @@ void readPhotodiodes() // takes 2 ms to run
   uint16_t l = analogRead(LEFT_INPUT);
   uint16_t r = analogRead(RIGHT_INPUT);
 
-  for (byte i = 1; i < 8; i++)
+  for (uint16_t i = 1; i < NR_SAMPLES; i++)
   {
     l += analogRead(LEFT_INPUT);
     r += analogRead(RIGHT_INPUT);
   }
-  sens_l = l / 8;
-  sens_r = r / 8;
+  sens_l = l / NR_SAMPLES;
+  sens_r = r / NR_SAMPLES;
   pidIn = sens_l - sens_r;
 }
 
@@ -164,13 +182,19 @@ void handleDistance()
 
 void blinkLed()
 {
-  digitalWrite(LED, HIGH);
-  delay(100);
-  digitalWrite(LED, LOW);
-  delay(100);
+  uint16_t now = millis();
+  if (now - lastBlink > 200)
+  {
+    digitalWrite(LED, HIGH);
+    lastBlink = now;
+  }
+  else if (now - lastBlink > 100)
+  {
+    digitalWrite(LED, LOW);
+  }
 }
 // returns true if the robot should search
-bool checkForsearch()
+bool checkForSearch()
 {
   return !(sens_l < cal_l + IDLE_OFFSET || sens_r < cal_r + IDLE_OFFSET);
 }
