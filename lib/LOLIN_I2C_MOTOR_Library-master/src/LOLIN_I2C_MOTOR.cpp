@@ -6,6 +6,7 @@
 LOLIN_I2C_MOTOR::LOLIN_I2C_MOTOR(uint8_t address)
 {
 	Wire.begin();
+
 	_address = address;
 }
 
