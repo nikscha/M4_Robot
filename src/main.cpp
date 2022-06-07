@@ -4,6 +4,7 @@
 #include <PID_v1.h>
 #include <HCSR04.h>
 #include <driver/dac.h>
+#include <Filter.h>
 
 #define LED 15
 #define LEFT_INPUT 16
@@ -58,6 +59,9 @@ uint8_t c=0;
 PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);
 LOLIN_I2C_MOTOR motor;                     // I2C address 0x30
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
+ExponentialFilter<int16_t> filter_l(40, 0);
+ExponentialFilter<int16_t> filter_r(40, 0);
+
 
 void setup()
 {
@@ -77,6 +81,9 @@ void setup()
   Serial.println("Begin!");
 
   calibratePhotodiodes();
+  filter_l.SetCurrent(cal_l);
+  filter_r.SetCurrent(cal_l);
+
   Serial.println("cal_l");
   Serial.println(cal_l);
   Serial.println("cal_r");
@@ -159,19 +166,27 @@ void calibratePhotodiodes()
   }
 }
 
-//take a reading from the photodiodes and average to reduce noise. 
+//take a reading from the photodiodes and filter it 
 void readPhotodiodes() // takes 2 ms to run
 {
   uint16_t l = analogRead(LEFT_INPUT);
   uint16_t r = analogRead(RIGHT_INPUT);
 
-  for (uint16_t i = 1; i < NR_SAMPLES; i++)
-  {
-    l += analogRead(LEFT_INPUT);
-    r += analogRead(RIGHT_INPUT);
-  }
-  sens_l = l / NR_SAMPLES;
-  sens_r = r / NR_SAMPLES;
+  // for (uint16_t i = 1; i < NR_SAMPLES; i++)
+  // {
+  //   l += analogRead(LEFT_INPUT);
+  //   r += analogRead(RIGHT_INPUT);
+  // }
+  // sens_l = l / NR_SAMPLES;
+  // sens_r = r / NR_SAMPLES;
+
+  filter_l.Filter(l);
+  filter_r.Filter(r);
+
+  sens_l=filter_l.Current();
+  sens_r=filter_r.Current();
+
+
   pidIn = sens_l - sens_r;
 }
 
