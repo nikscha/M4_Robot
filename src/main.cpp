@@ -9,7 +9,9 @@
 #define LEFT_INPUT 16
 #define RIGHT_INPUT 12
 #define IDLE_OFFSET -20
+
 #define NR_SAMPLES 32
+#define FILTER_VALUE 40
 
 #define TRIG 1
 #define ECHO 2
@@ -59,6 +61,8 @@ PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);
 LOLIN_I2C_MOTOR motor;                     // I2C address 0x30
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
 
+
+
 void setup()
 {
   pinMode(LED, OUTPUT);
@@ -77,6 +81,7 @@ void setup()
   Serial.println("Begin!");
 
   calibratePhotodiodes();
+
   Serial.println("cal_l");
   Serial.println(cal_l);
   Serial.println("cal_r");
@@ -89,7 +94,6 @@ void setup()
 
 void loop()
 {
- 
   u32_t start = millis();
   blinkLed();
   readPhotodiodes();
@@ -115,6 +119,7 @@ void loop()
   Serial.println(millis() - start);
 }
 
+
 void initPID()
 {
   setpoint = 0;
@@ -123,6 +128,7 @@ void initPID()
   myPID.SetMode(AUTOMATIC);
 }
 
+//initialize motors
 void initMotor()
 {
   while (motor.PRODUCT_ID != PRODUCT_ID_I2C_MOTOR)
@@ -141,6 +147,7 @@ void initMotor()
   motor.changeStatus(MOTOR_CH_B, MOTOR_STATUS_CW);
 }
 
+// take lots of readings of the photodiodes to establish a baseline
 void calibratePhotodiodes()
 {
   cal_l = analogRead(LEFT_INPUT);
@@ -155,21 +162,29 @@ void calibratePhotodiodes()
   }
 }
 
+//take a reading from the photodiodes and filter it 
 void readPhotodiodes() // takes 2 ms to run
 {
   uint16_t l = analogRead(LEFT_INPUT);
   uint16_t r = analogRead(RIGHT_INPUT);
 
-  for (uint16_t i = 1; i < NR_SAMPLES; i++)
-  {
-    l += analogRead(LEFT_INPUT);
-    r += analogRead(RIGHT_INPUT);
-  }
-  sens_l = l / NR_SAMPLES;
-  sens_r = r / NR_SAMPLES;
+  // for (uint16_t i = 1; i < NR_SAMPLES; i++)
+  // {
+  //   l += analogRead(LEFT_INPUT);
+  //   r += analogRead(RIGHT_INPUT);
+  // }
+  // sens_l = l / NR_SAMPLES;
+  // sens_r = r / NR_SAMPLES;
+
+  sens_l = (100 * FILTER_VALUE * l + (100 - FILTER_VALUE) * sens_l + 50)/100;
+  sens_r = (100 * FILTER_VALUE * r + (100 - FILTER_VALUE) * sens_r + 50)/100;
+
+
+
   pidIn = sens_l - sens_r;
 }
 
+// takes a distance measurement and if an object is too close, pause for a second
 void handleDistance()
 {
   distance = dist.measureDistanceCm();
@@ -179,6 +194,7 @@ void handleDistance()
   }
 }
 
+// blinks the led every 200 ms, call every loop
 void blinkLed()
 {
   uint16_t now = millis();
@@ -198,6 +214,7 @@ bool checkForSearch()
   return !(sens_l < cal_l + IDLE_OFFSET || sens_r < cal_r + IDLE_OFFSET);
 }
 
+// turns the robot until photodiodes read above a certain value
 void search()
 {
   while (checkForSearch)
