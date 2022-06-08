@@ -62,8 +62,8 @@ UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig 
 void setup()
 {
   pinMode(LED, OUTPUT);
-  pinMode(LEFT_INPUT, INPUT_PULLDOWN);
-  pinMode(RIGHT_INPUT, INPUT_PULLDOWN);
+  pinMode(LEFT_INPUT, INPUT);
+  pinMode(RIGHT_INPUT, INPUT);
   pinMode(39, OUTPUT);
   dac_output_enable(DAC_CHANNEL_1);
   dac_output_enable(DAC_CHANNEL_2);
@@ -89,7 +89,6 @@ void setup()
 
 void loop()
 {
-  c++;
  
   u32_t start = millis();
   blinkLed();
@@ -101,7 +100,7 @@ void loop()
   myPID.Compute();
   //Serial.println(pidOutput);
   dac_output_voltage(DAC_CHANNEL_1, pidOutput / 2 + 128);
-  dac_output_voltage(DAC_CHANNEL_2, c);
+  dac_output_voltage(DAC_CHANNEL_2, map(pidIn,0,255,-1000,1000));
 
   speed_l = base_speed + pidOutput;
   speed_r = base_speed + pidOutput * -1;
