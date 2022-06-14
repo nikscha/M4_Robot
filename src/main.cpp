@@ -103,12 +103,16 @@ void setup()
   initPID();
 }
 
+
+
+
 void loop()
 {
   unsigned long start = millis();
   blinkLed(LED);
   CheckForConnections();
   readPhotodiodes();
+
   // if (checkForSearch())
   //   search();
   // handleDistance();
@@ -116,6 +120,9 @@ void loop()
   setSpeeds();
   EchoReceivedData();
 }
+
+
+
 
 void CheckForConnections()
 {
@@ -142,28 +149,29 @@ void EchoReceivedData()
   uint8_t ReceiveBuffer[30];
   while (RemoteClient.connected() && RemoteClient.available())
   {
-    int Received = RemoteClient.read(ReceiveBuffer, sizeof(ReceiveBuffer));
-    RemoteClient.write(ReceiveBuffer, Received);
-    switch (ReceiveBuffer[0])
+    char c = RemoteClient.read();
+    switch (c)
     {
     case 'p':
     case 'P':
       Kp = RemoteClient.parseFloat();
       RemoteClient.print("Kp value is now ");
-      RemoteClient.println(Kp);
+      RemoteClient.println(Kp,5);
       break;
     case 'i':
     case 'I':
       Ki = RemoteClient.parseFloat();
       RemoteClient.print("Ki value is now ");
-      RemoteClient.println(Ki);
+      RemoteClient.println(Ki,5);
       break;
     case 'd':
     case 'D':
       Kd = RemoteClient.parseFloat();
       RemoteClient.print("Kd value is now ");
-      RemoteClient.println(Kd);
+      RemoteClient.println(Kd,5);
       break;
+    default:
+      RemoteClient.flush();
     }
   }
 }
@@ -265,6 +273,8 @@ void blinkLed(int led)
     ledOn = false;
   }
 }
+
+
 // returns true if the robot should search
 bool checkForSearch()
 {
