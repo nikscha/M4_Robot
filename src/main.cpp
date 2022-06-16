@@ -7,12 +7,14 @@
 #include <Ewma.h>
 #include <WiFi.h>
 #include <string.h>
+#include <Adafruit_NeoPixel.h>
 
 #define LED 15
-#define LEFT_INPUT 3
-#define RIGHT_INPUT 5
+#define LEFT_INPUT 13
+#define RIGHT_INPUT 12
 #define STOP_BUTTON 1
 #define START_BUTTON 2
+#define PAUSE_BUTTON 0
 #define SEARCH_LED 40
 #define STOP_LED 38
 #define OUT DAC_CHANNEL_1
@@ -38,6 +40,8 @@ void setSpeeds();
 void initWiFi();
 void CheckForConnections();
 void EchoReceivedData();
+void initAP();
+void checkForPause();
 
 const char *ssid = "StrangerPings";
 const char *password = "Fe@th3rwing";
@@ -45,7 +49,7 @@ const uint ServerPort = 23;
 
 double setpoint, pidOutput;
 // Specify tuning parameters
-double Kp = 0.05, Ki = 0.2, Kd = 0;
+double Kp = 3, Ki = 0.05, Kd = 0;
 
 double filter_value = 0.0001;
 double filter_value2 = 0.9998;
@@ -59,7 +63,8 @@ double pidIn = 0; // holds sens_l - sens_r
 
 int speed_l = 0;
 int speed_r = 0;
-int base_speed = 5;
+int base_speed = 0;
+double base_speed_multiplier = 0.14; // lower means faster
 bool reverse_l = false;
 bool reverse_r = false;
 
@@ -67,6 +72,7 @@ double distance = 0;
 
 u32_t lastBlink = 0;
 bool ledOn = false;
+bool pause_robot = false;
 
 uint8_t c = 0;
 
@@ -80,49 +86,57 @@ Ewma adcFilterL(0.1);
 Ewma adcFilterR(0.1);
 WiFiServer Server(ServerPort);
 WiFiClient RemoteClient;
+Adafruit_NeoPixel strip(10, 3, NEO_GRB + NEO_KHZ800);
 
 void setup()
 {
   pinMode(LED, OUTPUT);
   pinMode(LEFT_INPUT, INPUT);
   pinMode(RIGHT_INPUT, INPUT);
+  pinMode(PAUSE_BUTTON, INPUT_PULLUP);
+
   pinMode(39, OUTPUT);
   dac_output_enable(OUT);
   digitalWrite(LED, HIGH); // turn onboard led on to indicate functionaity
 
   Serial.begin(115200);
-  delay(2000);
-  Serial.println("Begin!");
+  strip.begin();
+  strip.setBrightness(255);
+  strip.fill(strip.Color(255, 255, 255));
 
   Wire.setPins(33, 35);
-  ML.start(0x30, _MOTOR_A, 1000); // Motor A
-  MR.start(0x30, _MOTOR_B, 1000); // Motor B
+  ML.start(0x30, _MOTOR_B, 1000); // Motor A
+  MR.start(0x30, _MOTOR_A, 1000); // Motor B
 
-  initWiFi();
+  // initWiFi();
+  initAP();
+  delay(2000);
   calibratePhotodiodes();
   initPID();
 }
 
-
-
-
 void loop()
 {
+  strip.fill(strip.Color(255, 255, 255));
   unsigned long start = millis();
+
+  do
+  {
+    CheckForConnections();
+    EchoReceivedData();
+    checkForPause();
+  } while (pause_robot);
+
   blinkLed(LED);
-  CheckForConnections();
   readPhotodiodes();
+  setSpeeds();
 
   // if (checkForSearch())
   //   search();
   // handleDistance();
 
-  setSpeeds();
-  EchoReceivedData();
+  // print(millis()-start);
 }
-
-
-
 
 void CheckForConnections()
 {
@@ -156,22 +170,49 @@ void EchoReceivedData()
     case 'P':
       Kp = RemoteClient.parseFloat();
       RemoteClient.print("Kp value is now ");
-      RemoteClient.println(Kp,5);
+      RemoteClient.println(Kp, 5);
       break;
     case 'i':
     case 'I':
       Ki = RemoteClient.parseFloat();
       RemoteClient.print("Ki value is now ");
-      RemoteClient.println(Ki,5);
+      RemoteClient.println(Ki, 5);
       break;
     case 'd':
     case 'D':
       Kd = RemoteClient.parseFloat();
       RemoteClient.print("Kd value is now ");
-      RemoteClient.println(Kd,5);
+      RemoteClient.println(Kd, 5);
+      break;
+    case 'b':
+    case 'B':
+      base_speed = RemoteClient.parseInt();
+      RemoteClient.print("base_speed is now ");
+      RemoteClient.println(base_speed);
+      break;
+    case 'c':
+    case 'C':
+      RemoteClient.println("Calibrating");
+      calibratePhotodiodes();
+      RemoteClient.println("DONE!");
+
+      break;
+    case 'm':
+    case 'M':
+      base_speed_multiplier = RemoteClient.parseFloat();
+      RemoteClient.print("base_speed_multiplier is now ");
+      RemoteClient.println(base_speed_multiplier);
+      break;
+    case 's':
+    case 'S':
+      pause_robot = !pause_robot;
+      RemoteClient.println(pause_robot ? "paused robot" : "unpaused robot");
+
       break;
     default:
       RemoteClient.flush();
+      RemoteClient.println("Not recognized");
+      break;
     }
   }
 }
@@ -179,11 +220,13 @@ void EchoReceivedData()
 void setSpeeds()
 {
   myPID.Compute();
-
   dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
 
+  base_speed = 180 - base_speed_multiplier * abs(pidOutput);
+  base_speed = max(50, base_speed);
+
   speed_l = base_speed + pidOutput;
-  speed_r = base_speed + pidOutput * -1;
+  speed_r = base_speed + (pidOutput * -1);
 
   reverse_l = speed_l < 0;
   reverse_r = speed_r < 0;
@@ -191,11 +234,11 @@ void setSpeeds()
   speed_l = abs(speed_l);
   speed_r = abs(speed_r);
 
-  speed_l = map(speed_l, 0, 255, 0, 30);
-  speed_r = map(speed_r, 0, 255, 0, 30);
+  speed_l = map(speed_l, 0, 255, 3, 35);
+  speed_r = map(speed_r, 0, 255, 3, 35);
 
-  ML.setmotor(reverse_l ? 1 : 2, speed_l);
-  MR.setmotor(reverse_r ? 1 : 2, speed_r);
+  ML.setmotor(reverse_l ? _CW : _CCW, speed_l);
+  MR.setmotor(reverse_r ? _CCW : _CW, speed_r);
 }
 
 void initPID()
@@ -209,6 +252,9 @@ void initPID()
 // take lots of readings of the photodiodes to establish a baseline
 void calibratePhotodiodes()
 {
+  ML.setmotor(_CW, 20);
+  MR.setmotor(_CW, 20);
+
   cal_l = analogRead(LEFT_INPUT);
   cal_r = analogRead(RIGHT_INPUT);
 
@@ -219,6 +265,9 @@ void calibratePhotodiodes()
     cal_l = (l + (i - 1) * cal_l) / i;
     cal_r = (r + (i - 1) * cal_r) / i;
   }
+
+  ML.setmotor(_CW, 0);
+  MR.setmotor(_CW, 0);
 
   Serial.println("cal_l:");
   Serial.println(cal_l);
@@ -242,6 +291,8 @@ void readPhotodiodes() // takes 2 ms to run
   // print("");
 
   pidIn = sens_l - sens_r;
+  strip.clear();
+  // strip.setPixelColor()
 }
 
 // takes a distance measurement and if an object is too close, pause for a second
@@ -273,7 +324,6 @@ void blinkLed(int led)
     ledOn = false;
   }
 }
-
 
 // returns true if the robot should search
 bool checkForSearch()
@@ -307,8 +357,7 @@ void print(double i)
 void initWiFi()
 {
   String hostname = "Robot";
-  WiFi.mode(WIFI_STA);
-  WiFi.setHostname(hostname.c_str()); // define hostname
+  // WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi ..");
   while (WiFi.status() != WL_CONNECTED)
@@ -319,4 +368,31 @@ void initWiFi()
   Serial.println(WiFi.localIP());
 
   Server.begin();
+}
+
+void initAP()
+{
+  String hostname = "Robot";
+  WiFi.setHostname(hostname.c_str()); // define hostname
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP("IAMROBOT", password);
+  Server.begin();
+}
+
+void checkForPause()
+{
+  if (digitalRead(PAUSE_BUTTON) == LOW)
+  {
+    pause_robot = !pause_robot;
+    RemoteClient.println(pause_robot ? "paused robot" : "unpaused robot");
+    delay(500);
+  }
+
+  if (pause_robot)
+  {
+    digitalWrite(LED, LOW);
+    strip.fill(strip.Color(255, 0, 0));
+    ML.setmotor(_CW, 0);
+    MR.setmotor(_CCW, 0);
+  }
 }

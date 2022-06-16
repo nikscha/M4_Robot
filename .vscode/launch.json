@@ -12,9 +12,9 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "g:/Medien/Dokumente/UNI/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
+            "executable": "c:/Users/nikscha/Desktop/Unistuff/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
             "projectEnvName": "lolin_s2_mini",
-            "toolchainBinDir": "C:/Users/dasta/.platformio/packages/toolchain-xtensa-esp32s2/bin",
+            "toolchainBinDir": "C:/Users/nikscha/.platformio/packages/toolchain-xtensa-esp32s2/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "preLaunchTask": {
                 "type": "PlatformIO",
@@ -25,18 +25,18 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "g:/Medien/Dokumente/UNI/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
+            "executable": "c:/Users/nikscha/Desktop/Unistuff/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
             "projectEnvName": "lolin_s2_mini",
-            "toolchainBinDir": "C:/Users/dasta/.platformio/packages/toolchain-xtensa-esp32s2/bin",
+            "toolchainBinDir": "C:/Users/nikscha/.platformio/packages/toolchain-xtensa-esp32s2/bin",
             "internalConsoleOptions": "openOnSessionStart"
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "g:/Medien/Dokumente/UNI/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
+            "executable": "c:/Users/nikscha/Desktop/Unistuff/Twente/M4/Project/M4_Robot/.pio/build/lolin_s2_mini/firmware.elf",
             "projectEnvName": "lolin_s2_mini",
-            "toolchainBinDir": "C:/Users/dasta/.platformio/packages/toolchain-xtensa-esp32s2/bin",
+            "toolchainBinDir": "C:/Users/nikscha/.platformio/packages/toolchain-xtensa-esp32s2/bin",
             "internalConsoleOptions": "openOnSessionStart",
             "loadMode": "manual"
         }

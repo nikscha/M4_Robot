@@ -1,4 +1,5 @@
 br3ttb/PID@^1.2.1
-jonniezg/EWMA@^1.0.2
 sstaub/Ticker@^4.4.0
 martinsos/HCSR04@^2.0.0
+adafruit/Adafruit NeoPixel@^1.10.5
+jonniezg/EWMA@^1.0.2
