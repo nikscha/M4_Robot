@@ -17,9 +17,11 @@
 #define PAUSE_BUTTON 0
 #define SEARCH_LED 40
 #define STOP_LED 38
+#define STRIP_PIN 6
+#define NR_LEDS 13
 #define OUT DAC_CHANNEL_1
 
-#define IDLE_THRESHOLD 20
+#define IDLE_THRESHOLD 200
 
 #define NR_SAMPLES 32
 
@@ -32,7 +34,7 @@ void calibratePhotodiodes();
 void readPhotodiodes();
 void handleDistance();
 void blinkLed(int led);
-bool checkForSearch();
+void checkForSearch();
 void search();
 void print(String s);
 void print(double i);
@@ -42,6 +44,7 @@ void CheckForConnections();
 void EchoReceivedData();
 void initAP();
 void checkForPause();
+void animateLEDS();
 
 const char *ssid = "StrangerPings";
 const char *password = "Fe@th3rwing";
@@ -70,9 +73,14 @@ bool reverse_r = false;
 
 double distance = 0;
 
+u32_t now = 0;
 u32_t lastBlink = 0;
+u32_t lastStripUpdate = 0;
+bool eyeMovingLeft = true;
 bool ledOn = false;
 bool pause_robot = false;
+int search_led = 0;
+bool search_for_player = false;
 
 uint8_t c = 0;
 
@@ -86,7 +94,8 @@ Ewma adcFilterL(0.1);
 Ewma adcFilterR(0.1);
 WiFiServer Server(ServerPort);
 WiFiClient RemoteClient;
-Adafruit_NeoPixel strip(10, 3, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);
+uint32_t RED = strip.Color(200, 0, 0);
 
 void setup()
 {
@@ -117,25 +126,65 @@ void setup()
 
 void loop()
 {
-  strip.fill(strip.Color(255, 255, 255));
+
   unsigned long start = millis();
 
-  do
-  {
-    CheckForConnections();
-    EchoReceivedData();
-    checkForPause();
-  } while (pause_robot);
-
+  CheckForConnections();
+  EchoReceivedData();
+  checkForPause();
+  checkForSearch();
+  animateLEDS();
   blinkLed(LED);
   readPhotodiodes();
   setSpeeds();
 
-  // if (checkForSearch())
-  //   search();
   // handleDistance();
 
   // print(millis()-start);
+}
+
+// returns true if the robot should search
+void checkForSearch()
+{
+  search_for_player = sens_l < IDLE_THRESHOLD && sens_r < IDLE_THRESHOLD;
+}
+
+void animateLEDS()
+{
+  if (pause_robot)
+  {
+    strip.fill(RED);
+    strip.show();
+  }
+  else if (search_for_player)
+  {
+    strip.clear();
+    strip.setPixelColor(search_led, RED);
+    strip.setPixelColor(search_led + 1, strip.Color(20, 0, 0));
+    strip.setPixelColor(search_led - 1, strip.Color(20, 0, 0));
+
+    now = millis();
+    if (lastStripUpdate + 50 < now)
+    {
+      lastStripUpdate = now;
+      if (search_led == 0)
+        eyeMovingLeft = false;
+      else if (search_led == NR_LEDS - 1)
+        eyeMovingLeft = true;
+
+      if (eyeMovingLeft)
+        search_led--;
+      else
+        search_led++;
+    }
+    strip.show();
+  }
+  else
+  {
+    strip.clear();
+    strip.setPixelColor(map(pidOutput, -500, 500, 1, NR_LEDS), strip.Color(0, 0, 200));
+    strip.show();
+  }
 }
 
 void CheckForConnections()
@@ -219,26 +268,40 @@ void EchoReceivedData()
 
 void setSpeeds()
 {
-  myPID.Compute();
-  dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
+  if (pause_robot)
+  {
+    ML.setmotor(_CCW, 0);
+    MR.setmotor(_CW, 0);
+  }
+  else if (search_for_player)
+  {
+    ML.setmotor(_CCW, 30);
+    MR.setmotor(_CCW, 30);
+  }
+  else
+  {
+    myPID.Compute();
+    dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
 
-  base_speed = 180 - base_speed_multiplier * abs(pidOutput);
-  base_speed = max(50, base_speed);
+    base_speed = 180 - base_speed_multiplier * abs(pidOutput);
+    base_speed = max(50, base_speed);
 
-  speed_l = base_speed + pidOutput;
-  speed_r = base_speed + (pidOutput * -1);
+    speed_l = base_speed + pidOutput;
+    speed_r = base_speed + (pidOutput * -1);
+    //speed_r = base_speed;
 
-  reverse_l = speed_l < 0;
-  reverse_r = speed_r < 0;
+    reverse_l = speed_l < 0;
+    reverse_r = speed_r < 0;
 
-  speed_l = abs(speed_l);
-  speed_r = abs(speed_r);
+    speed_l = abs(speed_l);
+    speed_r = abs(speed_r);
 
-  speed_l = map(speed_l, 0, 255, 3, 35);
-  speed_r = map(speed_r, 0, 255, 3, 35);
+    speed_l = map(speed_l, 0, 255, 3, 45);
+    speed_r = map(speed_r, 0, 255, 3, 45);
 
-  ML.setmotor(reverse_l ? _CW : _CCW, speed_l);
-  MR.setmotor(reverse_r ? _CCW : _CW, speed_r);
+    ML.setmotor(reverse_l ? _CW : _CCW, speed_l);
+    MR.setmotor(reverse_r ? _CCW : _CW, speed_r);
+  }
 }
 
 void initPID()
@@ -252,8 +315,8 @@ void initPID()
 // take lots of readings of the photodiodes to establish a baseline
 void calibratePhotodiodes()
 {
-  ML.setmotor(_CW, 20);
-  MR.setmotor(_CW, 20);
+  ML.setmotor(_CW, 25);
+  MR.setmotor(_CW, 0);
 
   cal_l = analogRead(LEFT_INPUT);
   cal_r = analogRead(RIGHT_INPUT);
@@ -311,7 +374,7 @@ void handleDistance()
 // blinks the led every 200 ms, call every loop
 void blinkLed(int led)
 {
-  u32_t now = millis();
+  now = millis();
   if (now - lastBlink > 200)
   {
     digitalWrite(led, HIGH);
@@ -322,25 +385,6 @@ void blinkLed(int led)
   {
     digitalWrite(led, LOW);
     ledOn = false;
-  }
-}
-
-// returns true if the robot should search
-bool checkForSearch()
-{
-  return (sens_l < IDLE_THRESHOLD && sens_r < IDLE_THRESHOLD);
-}
-
-// turns the robot until photodiodes read above a certain value
-void search()
-{
-  ML.setmotor(_CW, 20);
-  MR.setmotor(_CCW, 20);
-
-  while (checkForSearch)
-  {
-    readPhotodiodes();
-    blinkLed(LED);
   }
 }
 
