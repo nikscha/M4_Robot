@@ -21,7 +21,7 @@
 #define NR_LEDS 13
 #define OUT DAC_CHANNEL_1
 
-#define IDLE_THRESHOLD 200
+#define IDLE_THRESHOLD 100
 
 #define NR_SAMPLES 32
 
@@ -52,7 +52,7 @@ const uint ServerPort = 23;
 
 double setpoint, pidOutput;
 // Specify tuning parameters
-double Kp = 3, Ki = 0.05, Kd = 0;
+double Kp = 1.5, Ki = 0.05, Kd = 0.5;
 
 double filter_value = 0.0001;
 double filter_value2 = 0.9998;
@@ -72,6 +72,7 @@ bool reverse_l = false;
 bool reverse_r = false;
 
 double distance = 0;
+bool tooClose = false;
 
 u32_t now = 0;
 u32_t lastBlink = 0;
@@ -92,6 +93,7 @@ Motor MR;                                  // Motor B
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
 Ewma adcFilterL(0.1);
 Ewma adcFilterR(0.1);
+Ewma poidOutFilter(0.1);
 WiFiServer Server(ServerPort);
 WiFiClient RemoteClient;
 Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);
@@ -136,9 +138,8 @@ void loop()
   animateLEDS();
   blinkLed(LED);
   readPhotodiodes();
-  setSpeeds();
-
   // handleDistance();
+  setSpeeds();
 
   // print(millis()-start);
 }
@@ -182,7 +183,7 @@ void animateLEDS()
   else
   {
     strip.clear();
-    strip.setPixelColor(map(pidOutput, -500, 500, 1, NR_LEDS), strip.Color(0, 0, 200));
+    strip.setPixelColor(map(poidOutFilter.filter(pidOutput), -255, 255, 1, NR_LEDS), strip.Color(0, 0, 200));
     strip.show();
   }
 }
@@ -273,22 +274,29 @@ void setSpeeds()
     ML.setmotor(_CCW, 0);
     MR.setmotor(_CW, 0);
   }
-  else if (search_for_player)
+  else if (search_for_player) // rotates the robot unitl it finds a signal
   {
     ML.setmotor(_CCW, 30);
     MR.setmotor(_CCW, 30);
   }
-  else
+  else  // compute PID and speeds for each motor
   {
     myPID.Compute();
-    dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
+    //dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
 
-    base_speed = 180 - base_speed_multiplier * abs(pidOutput);
-    base_speed = max(50, base_speed);
+    if (tooClose) // reduces the base speed of the robot if it comes too close to an obstacle
+    {
+      base_speed = map(distance, 0, 30, -10, 100);
+    }
+    else
+    {
+      base_speed = 220 - base_speed_multiplier * abs(pidOutput);
+      base_speed = max(50, base_speed);
+    }
 
     speed_l = base_speed + pidOutput;
     speed_r = base_speed + (pidOutput * -1);
-    //speed_r = base_speed;
+    // speed_r = base_speed;
 
     reverse_l = speed_l < 0;
     reverse_r = speed_r < 0;
@@ -303,7 +311,7 @@ void setSpeeds()
     MR.setmotor(reverse_r ? _CCW : _CW, speed_r);
   }
 }
-
+// initialize the PID controller
 void initPID()
 {
   setpoint = 0;
@@ -315,7 +323,7 @@ void initPID()
 // take lots of readings of the photodiodes to establish a baseline
 void calibratePhotodiodes()
 {
-  ML.setmotor(_CW, 25);
+  ML.setmotor(_CW, 30);
   MR.setmotor(_CW, 0);
 
   cal_l = analogRead(LEFT_INPUT);
@@ -358,17 +366,11 @@ void readPhotodiodes() // takes 2 ms to run
   // strip.setPixelColor()
 }
 
-// takes a distance measurement and if an object is too close, pause for a second
+// takes a distance measurement and sets the tooClose flag
 void handleDistance()
 {
-  // exponentiall smooth so slow down response time?
   distance = dist.measureDistanceCm();
-  if (distance < STOP_DISTANCE)
-  {
-    digitalWrite(STOP_LED, HIGH);
-    delay(1000);
-    digitalWrite(STOP_LED, LOW);
-  }
+  tooClose = distance < 30;
 }
 
 // blinks the led every 200 ms, call every loop
@@ -388,16 +390,19 @@ void blinkLed(int led)
   }
 }
 
+// prints a string to the Serial Monitor
 void print(String s)
 {
   Serial.println(s);
 }
 
+// prints a double to the serial monitor
 void print(double i)
 {
   Serial.println(i, 16);
 }
 
+// connect to wifi
 void initWiFi()
 {
   String hostname = "Robot";
@@ -414,6 +419,7 @@ void initWiFi()
   Server.begin();
 }
 
+// initialize access point
 void initAP()
 {
   String hostname = "Robot";
@@ -423,6 +429,7 @@ void initAP()
   Server.begin();
 }
 
+// sets pause flag if button is pressed
 void checkForPause()
 {
   if (digitalRead(PAUSE_BUTTON) == LOW)
@@ -430,13 +437,5 @@ void checkForPause()
     pause_robot = !pause_robot;
     RemoteClient.println(pause_robot ? "paused robot" : "unpaused robot");
     delay(500);
-  }
-
-  if (pause_robot)
-  {
-    digitalWrite(LED, LOW);
-    strip.fill(strip.Color(255, 0, 0));
-    ML.setmotor(_CW, 0);
-    MR.setmotor(_CCW, 0);
   }
 }
