@@ -25,9 +25,9 @@
 
 #define NR_SAMPLES 32
 
-#define TRIG 1
-#define ECHO 2
-#define STOP_DISTANCE 30
+#define TRIG 11
+#define ECHO 14
+#define SLOWDOWNDIST 50
 
 void initPID();
 void calibratePhotodiodes();
@@ -94,6 +94,7 @@ UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig 
 Ewma adcFilterL(0.1);
 Ewma adcFilterR(0.1);
 Ewma poidOutFilter(0.1);
+Ewma distanceFilter(0.01);
 WiFiServer Server(ServerPort);
 WiFiClient RemoteClient;
 Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);
@@ -138,7 +139,7 @@ void loop()
   animateLEDS();
   blinkLed(LED);
   readPhotodiodes();
-  // handleDistance();
+  handleDistance();
   setSpeeds();
 
   // print(millis()-start);
@@ -178,6 +179,12 @@ void animateLEDS()
       else
         search_led++;
     }
+    strip.show();
+  }
+  else if (tooClose)
+  {
+    strip.clear();
+    strip.setPixelColor(map(distance, 10, SLOWDOWNDIST, 1, NR_LEDS), strip.Color(0, 200, 0));
     strip.show();
   }
   else
@@ -279,14 +286,14 @@ void setSpeeds()
     ML.setmotor(_CCW, 30);
     MR.setmotor(_CCW, 30);
   }
-  else  // compute PID and speeds for each motor
+  else // compute PID and speeds for each motor
   {
     myPID.Compute();
-    //dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
+    // dac_output_voltage(OUT, map(pidOutput, -255, 255, 10, 255));
 
     if (tooClose) // reduces the base speed of the robot if it comes too close to an obstacle
     {
-      base_speed = map(distance, 0, 30, -10, 100);
+      base_speed = map(distance, 10, SLOWDOWNDIST, -10, 100);
     }
     else
     {
@@ -369,8 +376,8 @@ void readPhotodiodes() // takes 2 ms to run
 // takes a distance measurement and sets the tooClose flag
 void handleDistance()
 {
-  distance = dist.measureDistanceCm();
-  tooClose = distance < 30;
+  distance = distanceFilter.filter(dist.measureDistanceCm());
+  tooClose = distance < SLOWDOWNDIST;
 }
 
 // blinks the led every 200 ms, call every loop
@@ -382,6 +389,7 @@ void blinkLed(int led)
     digitalWrite(led, HIGH);
     lastBlink = now;
     ledOn = true;
+    Serial.println(pidIn);
   }
   else if (now - lastBlink > 100 && ledOn)
   {
