@@ -9,25 +9,18 @@
 #include <string.h>
 #include <Adafruit_NeoPixel.h>
 
-#define LED 15
-#define LEFT_INPUT 13
-#define RIGHT_INPUT 12
-#define STOP_BUTTON 1
-#define START_BUTTON 2
-#define PAUSE_BUTTON 0
-#define SEARCH_LED 40
-#define STOP_LED 38
-#define STRIP_PIN 6
-#define NR_LEDS 13
-#define OUT DAC_CHANNEL_1
+#define LED 15         // onboard LED
+#define LEFT_INPUT 2   // left photodiode
+#define RIGHT_INPUT 3  // right photodiode
+#define PAUSE_BUTTON 0 // pause button
+#define STRIP_PIN 6    // pin where the LED strip is connected
+#define NR_LEDS 13  // amount of LEDs on the strip
 
-#define IDLE_THRESHOLD 100
+#define IDLE_THRESHOLD 100  // threshold to prevent the robot to chase ambient light.
 
-#define NR_SAMPLES 32
-
-#define TRIG 11
-#define ECHO 14
-#define SLOWDOWNDIST 50
+#define TRIG 11 //triger pin of the ultrasonic sensor
+#define ECHO 14 //echo pin
+#define SLOWDOWNDIST 10 //distance after which the robot slows down
 
 void initPID();
 void calibratePhotodiodes();
@@ -50,78 +43,72 @@ const char *ssid = "StrangerPings";
 const char *password = "Fe@th3rwing";
 const uint ServerPort = 23;
 
-double setpoint, pidOutput;
-// Specify tuning parameters
-double Kp = 1.5, Ki = 0.05, Kd = 0.5;
+double setpoint, pidOutput; // pid handlers
+double Kp = 1.5, Ki = 0.05, Kd = 0.5; // Specify tuning parameters
 
-double filter_value = 0.0001;
-double filter_value2 = 0.9998;
 
-float cal_l = 0; // holds the average value of the photodiodes
+float cal_l = 0; // holds the average value of the photodiodes, filled during calibration procedure
 float cal_r = 0;
 
 double sens_l = 0; // holds the denoised reading from the photodiodes
 double sens_r = 0;
 double pidIn = 0; // holds sens_l - sens_r
 
-int speed_l = 0;
-int speed_r = 0;
-int base_speed = 0;
+int speed_l = 0;  //holds the speed value of the left motor
+int speed_r = 0;  //same for right motor
+int base_speed = 0; // holds the base speed value
 double base_speed_multiplier = 0.14; // lower means faster
-bool reverse_l = false;
-bool reverse_r = false;
+bool reverse_l = false; //whether to drive the left motor in reverse
+bool reverse_r = false; // same for right motor
 
-double distance = 0;
-bool tooClose = false;
+double distance = 0;  //distance measurement of the ultrasonic sensos
+bool tooClose = false;  // true if the distance is below the SLOWDOWNDIST
 
-u32_t now = 0;
-u32_t lastBlink = 0;
-u32_t lastStripUpdate = 0;
-bool eyeMovingLeft = true;
-bool ledOn = false;
-bool pause_robot = false;
-int search_led = 0;
-bool search_for_player = false;
+u32_t now = 0;  //time
+u32_t lastBlink = 0;  // time of the last LED blink
+u32_t lastStripUpdate = 0;  //time of the last LED strip update
+bool eyeMovingLeft = true;  // whether the LED animation is moving towards the left
+bool ledOn = false; // whether the onboard led is currently on
+bool pause_robot = false;   //wether the robot is in it's pause state
+int search_led = 0; // index the active led, used for the search animation
+bool search_for_player = false; // whether the robot is in the search state
 
-uint8_t c = 0;
 
-PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);
-// Motor shield default I2C Address: 0x30
-// PWM frequency: 1000Hz(1kHz)
+PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);   // pid controller
 Motor ML;                                  // Motor A
 Motor MR;                                  // Motor B
 UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
-Ewma adcFilterL(0.1);
-Ewma adcFilterR(0.1);
-Ewma poidOutFilter(0.1);
-Ewma distanceFilter(0.01);
-WiFiServer Server(ServerPort);
+Ewma adcFilterL(0.1); // left sensor filter
+Ewma adcFilterR(0.1);  // right sensor filter
+Ewma poidOutFilter(0.1); // pid output filter, used for the animation
+Ewma distanceFilter(0.01);  // distance filter
+WiFiServer Server(ServerPort);  
 WiFiClient RemoteClient;
-Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);
-uint32_t RED = strip.Color(200, 0, 0);
+Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);  //led trip
+uint32_t RED = strip.Color(200, 0, 0);  // definition of the color red
 
 void setup()
 {
+  // setting the pinmodes
   pinMode(LED, OUTPUT);
   pinMode(LEFT_INPUT, INPUT);
   pinMode(RIGHT_INPUT, INPUT);
   pinMode(PAUSE_BUTTON, INPUT_PULLUP);
-
   pinMode(39, OUTPUT);
-  dac_output_enable(OUT);
+
   digitalWrite(LED, HIGH); // turn onboard led on to indicate functionaity
 
+  //initilizing all objects
   Serial.begin(115200);
   strip.begin();
   strip.setBrightness(255);
   strip.fill(strip.Color(255, 255, 255));
-
   Wire.setPins(33, 35);
   ML.start(0x30, _MOTOR_B, 1000); // Motor A
   MR.start(0x30, _MOTOR_A, 1000); // Motor B
 
-  // initWiFi();
-  initAP();
+  // preparing robot
+  initAP(); 
   delay(2000);
   calibratePhotodiodes();
   initPID();
@@ -129,20 +116,15 @@ void setup()
 
 void loop()
 {
-
-  unsigned long start = millis();
-
-  CheckForConnections();
-  EchoReceivedData();
+  // CheckForConnections();
+  // EchoReceivedData();
   checkForPause();
   checkForSearch();
   animateLEDS();
   blinkLed(LED);
   readPhotodiodes();
-  handleDistance();
+  // handleDistance();  //not working
   setSpeeds();
-
-  // print(millis()-start);
 }
 
 // returns true if the robot should search
@@ -151,6 +133,7 @@ void checkForSearch()
   search_for_player = sens_l < IDLE_THRESHOLD && sens_r < IDLE_THRESHOLD;
 }
 
+//animation of LEDS
 void animateLEDS()
 {
   if (pause_robot)
@@ -161,9 +144,9 @@ void animateLEDS()
   else if (search_for_player)
   {
     strip.clear();
-    strip.setPixelColor(search_led, RED);
-    strip.setPixelColor(search_led + 1, strip.Color(20, 0, 0));
-    strip.setPixelColor(search_led - 1, strip.Color(20, 0, 0));
+    strip.setPixelColor(search_led, strip.Color(0,0,200));
+    strip.setPixelColor(search_led + 1, strip.Color(0, 0, 20));
+    strip.setPixelColor(search_led - 1, strip.Color(0, 0, 20));
 
     now = millis();
     if (lastStripUpdate + 50 < now)
@@ -184,13 +167,13 @@ void animateLEDS()
   else if (tooClose)
   {
     strip.clear();
-    strip.setPixelColor(map(distance, 10, SLOWDOWNDIST, 1, NR_LEDS), strip.Color(0, 200, 0));
+    strip.setPixelColor(map(distance, 10, SLOWDOWNDIST, 1, NR_LEDS), strip.Color(200, 0, 0));
     strip.show();
   }
   else
   {
     strip.clear();
-    strip.setPixelColor(map(poidOutFilter.filter(pidOutput), -255, 255, 1, NR_LEDS), strip.Color(0, 0, 200));
+    strip.setPixelColor(map(poidOutFilter.filter(pidOutput), -255, 255, 1, NR_LEDS), strip.Color(0, 200, 0));
     strip.show();
   }
 }
@@ -274,6 +257,7 @@ void EchoReceivedData()
   }
 }
 
+//calculate speeds
 void setSpeeds()
 {
   if (pause_robot)
@@ -338,6 +322,8 @@ void calibratePhotodiodes()
 
   for (int16_t i = 1; i < INT16_MAX; i++)
   {
+    // strip.setPixelColor(map(i,0,INT16_MAX,0,NR_LEDS),strip.Color(0,200,0));
+    // strip.show();
     uint16_t l = analogRead(LEFT_INPUT);
     uint16_t r = analogRead(RIGHT_INPUT);
     cal_l = (l + (i - 1) * cal_l) / i;
@@ -369,8 +355,6 @@ void readPhotodiodes() // takes 2 ms to run
   // print("");
 
   pidIn = sens_l - sens_r;
-  strip.clear();
-  // strip.setPixelColor()
 }
 
 // takes a distance measurement and sets the tooClose flag
