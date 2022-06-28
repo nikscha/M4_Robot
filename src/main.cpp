@@ -14,13 +14,13 @@
 #define RIGHT_INPUT 3  // right photodiode
 #define PAUSE_BUTTON 0 // pause button
 #define STRIP_PIN 6    // pin where the LED strip is connected
-#define NR_LEDS 13  // amount of LEDs on the strip
+#define NR_LEDS 13     // amount of LEDs on the strip
 
-#define IDLE_THRESHOLD 100  // threshold to prevent the robot to chase ambient light.
+#define IDLE_THRESHOLD 100 // threshold to prevent the robot to chase ambient light.
 
-#define TRIG 11 //triger pin of the ultrasonic sensor
-#define ECHO 14 //echo pin
-#define SLOWDOWNDIST 10 //distance after which the robot slows down
+#define TRIG 11         // triger pin of the ultrasonic sensor
+#define ECHO 14         // echo pin
+#define SLOWDOWNDIST 10 // distance after which the robot slows down
 
 void initPID();
 void calibratePhotodiodes();
@@ -39,13 +39,12 @@ void initAP();
 void checkForPause();
 void animateLEDS();
 
-const char *ssid = "StrangerPings";
-const char *password = "Fe@th3rwing";
+const char *ssid = "xxx";
+const char *password = "xxx";
 const uint ServerPort = 23;
 
-double setpoint, pidOutput; // pid handlers
+double setpoint, pidOutput;           // pid handlers
 double Kp = 1.5, Ki = 0.05, Kd = 0.5; // Specify tuning parameters
-
 
 float cal_l = 0; // holds the average value of the photodiodes, filled during calibration procedure
 float cal_r = 0;
@@ -54,38 +53,37 @@ double sens_l = 0; // holds the denoised reading from the photodiodes
 double sens_r = 0;
 double pidIn = 0; // holds sens_l - sens_r
 
-int speed_l = 0;  //holds the speed value of the left motor
-int speed_r = 0;  //same for right motor
-int base_speed = 0; // holds the base speed value
+int32_t speed_l = 0;                 // holds the speed value of the left motor
+int32_t speed_r = 0;                 // same for right motor
+int32_t base_speed = 0;              // holds the base speed value
 double base_speed_multiplier = 0.14; // lower means faster
-bool reverse_l = false; //whether to drive the left motor in reverse
-bool reverse_r = false; // same for right motor
+bool reverse_l = false;              // whether to drive the left motor in reverse
+bool reverse_r = false;              // same for right motor
 
-double distance = 0;  //distance measurement of the ultrasonic sensos
-bool tooClose = false;  // true if the distance is below the SLOWDOWNDIST
+double distance = 0;   // distance measurement of the ultrasonic sensos
+bool tooClose = false; // true if the distance is below the SLOWDOWNDIST
 
-u32_t now = 0;  //time
-u32_t lastBlink = 0;  // time of the last LED blink
-u32_t lastStripUpdate = 0;  //time of the last LED strip update
-bool eyeMovingLeft = true;  // whether the LED animation is moving towards the left
-bool ledOn = false; // whether the onboard led is currently on
-bool pause_robot = false;   //wether the robot is in it's pause state
-int search_led = 0; // index the active led, used for the search animation
+u32_t now = 0;                  // time
+u32_t lastBlink = 0;            // time of the last LED blink
+u32_t lastStripUpdate = 0;      // time of the last LED strip update
+bool eyeMovingLeft = true;      // whether the LED animation is moving towards the left
+bool ledOn = false;             // whether the onboard led is currently on
+bool pause_robot = false;       // wether the robot is in it's pause state
+int search_led = 0;             // index the active led, used for the search animation
 bool search_for_player = false; // whether the robot is in the search state
 
-
-PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT);   // pid controller
-Motor ML;                                  // Motor A
-Motor MR;                                  // Motor B
-UltraSonicDistanceSensor dist(TRIG, ECHO); // initialisation class HCSR04 (trig pin , echo pin)
-Ewma adcFilterL(0.1); // left sensor filter
-Ewma adcFilterR(0.1);  // right sensor filter
-Ewma poidOutFilter(0.1); // pid output filter, used for the animation
-Ewma distanceFilter(0.01);  // distance filter
-WiFiServer Server(ServerPort);  
+PID myPID(&pidIn, &pidOutput, &setpoint, Kp, Ki, Kd, DIRECT); // pid controller
+Motor ML;                                                     // Motor A
+Motor MR;                                                     // Motor B
+UltraSonicDistanceSensor dist(TRIG, ECHO);                    // initialisation class HCSR04 (trig pin , echo pin)
+Ewma adcFilterL(0.1);                                         // left sensor filter
+Ewma adcFilterR(0.1);                                         // right sensor filter
+Ewma poidOutFilter(0.1);                                      // pid output filter, used for the animation
+Ewma distanceFilter(0.01);                                    // distance filter
+WiFiServer Server(ServerPort);
 WiFiClient RemoteClient;
-Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800);  //led trip
-uint32_t RED = strip.Color(200, 0, 0);  // definition of the color red
+Adafruit_NeoPixel strip(NR_LEDS, STRIP_PIN, NEO_GRB + NEO_KHZ800); // led trip
+uint32_t RED = strip.Color(200, 0, 0);                             // definition of the color red
 
 void setup()
 {
@@ -98,7 +96,7 @@ void setup()
 
   digitalWrite(LED, HIGH); // turn onboard led on to indicate functionaity
 
-  //initilizing all objects
+  // initilizing all objects
   Serial.begin(115200);
   strip.begin();
   strip.setBrightness(255);
@@ -108,7 +106,7 @@ void setup()
   MR.start(0x30, _MOTOR_A, 1000); // Motor B
 
   // preparing robot
-  initAP(); 
+  initAP();
   delay(2000);
   calibratePhotodiodes();
   initPID();
@@ -120,11 +118,12 @@ void loop()
   // EchoReceivedData();
   checkForPause();
   checkForSearch();
-  animateLEDS();
+  //animateLEDS();
   blinkLed(LED);
   readPhotodiodes();
   // handleDistance();  //not working
   setSpeeds();
+
 }
 
 // returns true if the robot should search
@@ -133,7 +132,7 @@ void checkForSearch()
   search_for_player = sens_l < IDLE_THRESHOLD && sens_r < IDLE_THRESHOLD;
 }
 
-//animation of LEDS
+// animation of LEDS
 void animateLEDS()
 {
   if (pause_robot)
@@ -144,7 +143,7 @@ void animateLEDS()
   else if (search_for_player)
   {
     strip.clear();
-    strip.setPixelColor(search_led, strip.Color(0,0,200));
+    strip.setPixelColor(search_led, strip.Color(0, 0, 200));
     strip.setPixelColor(search_led + 1, strip.Color(0, 0, 20));
     strip.setPixelColor(search_led - 1, strip.Color(0, 0, 20));
 
@@ -257,7 +256,7 @@ void EchoReceivedData()
   }
 }
 
-//calculate speeds
+// calculate speeds
 void setSpeeds()
 {
   if (pause_robot)
@@ -281,27 +280,34 @@ void setSpeeds()
     }
     else
     {
-      base_speed = 220 - base_speed_multiplier * abs(pidOutput);
-      base_speed = max(50, base_speed);
+      base_speed = 250 - base_speed_multiplier * abs(pidOutput);
+      base_speed = max(80, base_speed);
     }
 
     speed_l = base_speed + pidOutput;
     speed_r = base_speed + (pidOutput * -1);
     // speed_r = base_speed;
 
+
+
     reverse_l = speed_l < 0;
     reverse_r = speed_r < 0;
 
     speed_l = abs(speed_l);
     speed_r = abs(speed_r);
+            strip.fill(strip.Color(0,200,0));
+  strip.show();
 
     speed_l = map(speed_l, 0, 255, 3, 45);
     speed_r = map(speed_r, 0, 255, 3, 45);
 
     ML.setmotor(reverse_l ? _CW : _CCW, speed_l);
     MR.setmotor(reverse_r ? _CCW : _CW, speed_r);
+        strip.fill(strip.Color(200,0,0));
+  strip.show();
   }
 }
+
 // initialize the PID controller
 void initPID()
 {
